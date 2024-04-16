@@ -59,8 +59,9 @@ public:
  
     void AddDocument(int document_id, const string& document) {
         const vector<string> words = SplitIntoWordsNoStop(document);
+        double frequency = 1.0 / words.size();
         for (const string& word : words) {
-            word_to_document_freqs_[word][document_id] += 1.0 / words.size();
+            word_to_document_freqs_[word][document_id] += frequency;
         }    
         
         ++document_count_;    
@@ -97,7 +98,7 @@ private:
     bool IsStopWord(const string& word) const {
         return stop_words_.count(word) > 0;
     }
- 
+
     vector<string> SplitIntoWordsNoStop(const string& text) const {
         vector<string> words;
         for (const string& word : SplitIntoWords(text)) {
@@ -122,16 +123,21 @@ private:
 
         return query_words;
     }
- 
+    
+    double FindIDF(const string& word) const {
+        return log(document_count_ * 1.0 / word_to_document_freqs_.at(word).size());
+    }
+
     vector<Document> FindAllDocuments(const Query& query_words) const {
         map<int, double> document_to_relevance;
         vector<Document> matched_documents;
         
-        for (const string& word : query_words.plus_words) {
+        for (const string& word : query_words.plus_words) { 
             if (word_to_document_freqs_.count(word) != 0) {
+                double IDF_of_word = FindIDF(word);
+                
                 for (const auto& [document_id, freq] : word_to_document_freqs_.at(word)) {
-                    document_to_relevance[document_id] += log(document_count_
-                    * 1.0 / word_to_document_freqs_.at(word).size()) * freq;
+                    document_to_relevance[document_id] += IDF_of_word * freq;
                 }
             }
         }
@@ -155,7 +161,7 @@ private:
 SearchServer CreateSearchServer() {
     SearchServer search_server;
     search_server.SetStopWords(ReadLine());
- 
+
     const int document_count = ReadLineWithNumber();
     for (int document_id = 0; document_id < document_count; ++document_id) {
         search_server.AddDocument(document_id, ReadLine());
