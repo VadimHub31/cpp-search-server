@@ -80,8 +80,6 @@ enum class DocumentStatus {
 
 class SearchServer {
 public:
-    inline static constexpr int INVALID_DOCUMENT_ID = -1;
-
     template <typename StringContainer>
     explicit SearchServer(const StringContainer& stop_words)
         : stop_words_(MakeUniqueNonEmptyStrings(stop_words)) {
@@ -108,7 +106,7 @@ public:
     }
 
     void AddDocument(int document_id, const string& document, DocumentStatus status, const vector<int>& ratings) {
-        if (document_id < 0 || documents_.count(document_id) != 0 || !IsValidWord(document)) {
+        if (document_id < 0 || documents_.count(document_id) != 0) {
             throw invalid_argument("unacceptable document"s);
         }
 
@@ -125,18 +123,6 @@ public:
     vector<Document> FindTopDocuments(const string& raw_query, DocumentPredicate document_predicate) const {
         
         const Query query = ParseQuery(raw_query);
-        for(const auto& word : query.plus_words) {
-            if (!IsValidQuery(word)) {
-                throw invalid_argument("unacceptable query"s);
-            }
-        }
-
-        for(const string& word : query.minus_words) {
-            if (!IsValidQuery(word) && word.empty()) {
-                throw invalid_argument("unacceptable query"s);
-            }
-        }
-
         vector<Document> matched_documents = FindAllDocuments(query, document_predicate);
 
         sort(matched_documents.begin(), matched_documents.end(),
@@ -171,10 +157,6 @@ public:
         const Query query = ParseQuery(raw_query);
         vector<string> matched_words;
         for (const string& word : query.plus_words) {
-            if (!IsValidQuery(word)) {
-                throw invalid_argument("unacceptable query"s);
-            }
-
             if (word_to_document_freqs_.count(word) == 0) {
                 continue;
             }
@@ -184,10 +166,6 @@ public:
         }
         
         for (const string& word : query.minus_words) {
-            if (!IsValidQuery(word)) {
-                throw invalid_argument("unacceptable query"s);
-            }
-            
             if (word_to_document_freqs_.count(word) == 0) {
                 continue;
             }
@@ -221,7 +199,7 @@ private:
     }
 
     static bool IsValidQuery(const string& word) {
-        if (word.empty() || word[0] == '-' || !IsValidWord(word)) {
+        if (word.empty() || !IsValidWord(word)) {
             return false;
         }
         return true;
@@ -230,6 +208,9 @@ private:
     vector<string> SplitIntoWordsNoStop(const string& text) const {
         vector<string> words;
         for (const string& word : SplitIntoWords(text)) {
+            if (!IsValidWord(word)) {
+                throw invalid_argument("unacceptable document"s);
+            }
             if (!IsStopWord(word)) {
                 words.push_back(word);
             }
@@ -255,9 +236,13 @@ private:
     };
 
     QueryWord ParseQueryWord(string text) const {
+        if (!IsValidQuery(text)) {
+            throw invalid_argument("unacceptable query"s);
+        }
+
         bool is_minus = false;
-        if (text[0] == '-' && text[1] == '-') {
-            return {text, is_minus, IsStopWord(text)};
+        if ((text[0] == '-' && text[1] == '-') || (text[0] == '-' && text.size() == 1)) {
+            throw invalid_argument("unacceptable query"s);
         }
         // Word shouldn't be empty
         if (text[0] == '-') {
